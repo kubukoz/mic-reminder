@@ -121,32 +121,9 @@ func isZoomInCall() -> Bool {
     return output.contains("CptHost")
 }
 
-setbuf(stdout, nil)
-
-if CommandLine.arguments.contains("--debug-once") {
-    let audio = currentAudioState()
-    let inCall = isZoomInCall()
-    print("inCall=\(inCall) at2020Connected=\(audio.at2020Connected) airpodsConnected=\(audio.airpodsConnected) defaultInputName=\(audio.defaultInputName ?? "nil")")
-    exit(0)
-}
-
-print("mic-reminder: watching for Zoom calls using AirPods as mic while AT2020USB-X is connected (Ctrl+C to stop)")
-
-var wasTriggered = false
-
-while true {
+func shouldWarn() -> Bool {
     let audio = currentAudioState()
     let inCall = isZoomInCall()
     let usingAirpods = audio.defaultInputName?.contains(airpodsNameHint) ?? false
-
-    let triggered = inCall && usingAirpods && audio.at2020Connected
-
-    if triggered && !wasTriggered {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        print("[\(timestamp)] ⚠️  Zoom call detected using AirPods as mic while AT2020USB-X is connected — consider switching input!")
-    }
-
-    wasTriggered = triggered
-
-    Thread.sleep(forTimeInterval: pollInterval)
+    return inCall && usingAirpods && audio.at2020Connected
 }
