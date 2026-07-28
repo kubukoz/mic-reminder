@@ -3,6 +3,12 @@
 A macOS menu bar app that warns you when your active microphone isn't the one
 you'd prefer, and offers a one-click switch.
 
+Free and open-source (Apache 2.0). Covers a small subset of what
+[AudioWrangler](https://audiowrangler.app/) does — automatic mic-priority
+switching, with a warning-and-confirm popover instead of fully automatic
+switching. Not affiliated with or endorsed by AudioWrangler; if you want a
+more complete, polished tool, that's a good place to look.
+
 ## How it works
 
 You rank your microphones by preference in a priority list (via Preferences).
