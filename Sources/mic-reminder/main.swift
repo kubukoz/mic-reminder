@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 280, height: 90)
+        popover.contentSize = NSSize(width: 280, height: 120)
 
         timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
             self?.poll()
@@ -45,13 +45,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         label.font = NSFont.systemFont(ofSize: 13)
         label.translatesAutoresizingMaskIntoConstraints = false
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 90))
+        let switchButton = NSButton(title: "Switch to \(at2020Name)", target: self, action: #selector(switchToAT2020))
+        switchButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 120))
         container.addSubview(label)
+        container.addSubview(switchButton)
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
             label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+
+            switchButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            switchButton.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 12),
+            switchButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
         ])
 
         let viewController = NSViewController()
@@ -59,6 +66,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = viewController
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    @objc private func switchToAT2020() {
+        if let deviceID = at2020DeviceID() {
+            setDefaultInputDevice(deviceID)
+        }
+        popover.performClose(nil)
     }
 }
 

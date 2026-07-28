@@ -121,6 +121,29 @@ func isZoomInCall() -> Bool {
     return output.contains("CptHost")
 }
 
+func at2020DeviceID() -> AudioDeviceID? {
+    allAudioDeviceIDs().first { deviceName($0) == at2020Name }
+}
+
+@discardableResult
+func setDefaultInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+    var mutableDeviceID = deviceID
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultInputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    let status = AudioObjectSetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address,
+        0,
+        nil,
+        UInt32(MemoryLayout<AudioDeviceID>.size),
+        &mutableDeviceID
+    )
+    return status == noErr
+}
+
 func shouldWarn() -> Bool {
     let audio = currentAudioState()
     let inCall = isZoomInCall()
