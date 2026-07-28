@@ -3,8 +3,8 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
-    private var timer: Timer!
-    private var wasTriggered = false
+    private var lastTriggeredEntry: String?
+    private var preferencesWindowController: PreferencesWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Preferences…", action: #selector(showPreferences), keyEquivalent: ","))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
 
@@ -20,10 +22,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 280, height: 120)
 
-        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+        reconcileKnownMicNames()
+        onAudioConfigurationChanged { [weak self] in
             self?.poll()
         }
         poll()
+    }
+
+    @objc private func showPreferences() {
+        if let controller = preferencesWindowController, controller.window?.isVisible == true {
+            controller.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        reconcileKnownMicNames()
+        let controller = PreferencesWindowController()
+        controller.onSave = { [weak self] in
+            self?.poll()
+        }
+        preferencesWindowController = controller
+        controller.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quit() {
@@ -31,21 +51,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func poll() {
-        let triggered = shouldWarn()
-        if triggered && !wasTriggered {
-            showWarning()
+        reconcileKnownMicNames()
+        let betterEntry = betterMicEntryThanCurrent()
+        if let betterEntry, betterEntry != lastTriggeredEntry {
+            showWarning(betterEntry: betterEntry)
         }
-        wasTriggered = triggered
+        lastTriggeredEntry = betterEntry
     }
 
-    private func showWarning() {
+    private func showWarning(betterEntry: String) {
         guard let button = statusItem.button else { return }
 
-        let label = NSTextField(wrappingLabelWithString: "Zoom call using AirPods as mic while AT2020USB-X is connected — consider switching input!")
+        let currentName = currentDefaultInputName() ?? "current mic"
+        let label = NSTextField(wrappingLabelWithString: "Using \(currentName), but \(betterEntry) is available and ranked higher — consider switching input!")
         label.font = NSFont.systemFont(ofSize: 13)
         label.translatesAutoresizingMaskIntoConstraints = false
 
-        let switchButton = NSButton(title: "Switch to \(at2020Name)", target: self, action: #selector(switchToAT2020))
+        let switchButton = NSButton(title: "Switch to \(betterEntry)", target: self, action: #selector(switchToBetterMic))
         switchButton.translatesAutoresizingMaskIntoConstraints = false
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 120))
@@ -68,9 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 
-    @objc private func switchToAT2020() {
-        if let deviceID = at2020DeviceID() {
-            setDefaultInputDevice(deviceID)
+    @objc private func switchToBetterMic() {
+        if let entry = lastTriggeredEntry, let id = deviceID(forPriorityEntry: entry) {
+            setDefaultInputDevice(id)
         }
         popover.performClose(nil)
     }

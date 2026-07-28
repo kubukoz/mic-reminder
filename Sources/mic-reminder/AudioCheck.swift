@@ -1,10 +1,6 @@
 import CoreAudio
 import Foundation
 
-let airpodsNameHint = "AirPods"
-let at2020Name = "AT2020USB-X"
-let pollInterval: TimeInterval = 10
-
 func allAudioDeviceIDs() -> [AudioDeviceID] {
     var propertySize: UInt32 = 0
     var address = AudioObjectPropertyAddress(
@@ -64,65 +60,57 @@ func defaultInputDeviceID() -> AudioDeviceID? {
     return deviceID
 }
 
-struct AudioState {
-    let at2020Connected: Bool
-    let airpodsConnected: Bool
-    let defaultInputName: String?
+// Names of all currently connected devices that have at least one input stream.
+func connectedInputDeviceNames() -> [String] {
+    allAudioDeviceIDs().compactMap { id in
+        guard deviceHasInputStreams(id), let name = deviceName(id) else { return nil }
+        return name
+    }
 }
 
-func currentAudioState() -> AudioState {
-    let deviceIDs = allAudioDeviceIDs()
-    let defaultInputID = defaultInputDeviceID()
+func currentDefaultInputName() -> String? {
+    guard let id = defaultInputDeviceID() else { return nil }
+    return deviceName(id)
+}
 
-    var at2020Connected = false
-    var airpodsConnected = false
-    var defaultInputName: String? = nil
+// Adds any currently connected device not already known (in either the
+// priority list or the unranked list) to the unranked list, preserving
+// existing order in both lists. Call before reading or displaying the lists
+// so newly connected devices show up (as unranked, not auto-prioritized).
+func reconcileKnownMicNames() {
+    let priorityList = Settings.micPriorityList
+    var unranked = Settings.unrankedMicNames
+    let connectedNames = connectedInputDeviceNames()
 
-    for id in deviceIDs {
-        guard let name = deviceName(id) else { continue }
-
-        if name == at2020Name {
-            at2020Connected = true
-        }
-        if name.contains(airpodsNameHint), deviceHasInputStreams(id) {
-            airpodsConnected = true
-        }
-        if id == defaultInputID {
-            defaultInputName = name
-        }
+    let isKnown: (String) -> Bool = { name in
+        priorityList.contains(where: { name.contains($0) || $0.contains(name) })
+            || unranked.contains(where: { name.contains($0) || $0.contains(name) })
     }
 
-    return AudioState(
-        at2020Connected: at2020Connected,
-        airpodsConnected: airpodsConnected,
-        defaultInputName: defaultInputName
-    )
-}
-
-func isZoomInCall() -> Bool {
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/bin/ps")
-    task.arguments = ["-ax", "-o", "comm"]
-
-    let pipe = Pipe()
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-
-    do {
-        try task.run()
-    } catch {
-        return false
+    for name in connectedNames where !isKnown(name) {
+        unranked.append(name)
     }
-
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    task.waitUntilExit()
-    let output = String(data: data, encoding: .utf8) ?? ""
-
-    return output.contains("CptHost")
+    Settings.unrankedMicNames = unranked
 }
 
-func at2020DeviceID() -> AudioDeviceID? {
-    allAudioDeviceIDs().first { deviceName($0) == at2020Name }
+// The highest-priority entry (from Settings.micPriorityList) that has a
+// currently connected matching device, if any.
+func bestAvailableMicPriorityEntry() -> String? {
+    let connectedNames = connectedInputDeviceNames()
+    return Settings.micPriorityList.first { entry in
+        connectedNames.contains { $0.contains(entry) }
+    }
+}
+
+func priorityEntry(matching deviceName: String) -> String? {
+    Settings.micPriorityList.first { deviceName.contains($0) }
+}
+
+func deviceID(forPriorityEntry entry: String) -> AudioDeviceID? {
+    allAudioDeviceIDs().first { id in
+        guard let name = deviceName(id) else { return false }
+        return name.contains(entry)
+    }
 }
 
 @discardableResult
@@ -144,9 +132,51 @@ func setDefaultInputDevice(_ deviceID: AudioDeviceID) -> Bool {
     return status == noErr
 }
 
-func shouldWarn() -> Bool {
-    let audio = currentAudioState()
-    let inCall = isZoomInCall()
-    let usingAirpods = audio.defaultInputName?.contains(airpodsNameHint) ?? false
-    return inCall && usingAirpods && audio.at2020Connected
+// A better mic is available if a connected device from the priority list
+// outranks whatever's currently active. A current input that isn't in the
+// priority list at all is treated as ranked below every listed device.
+func betterMicEntryThanCurrent() -> String? {
+    guard let bestEntry = bestAvailableMicPriorityEntry() else { return nil }
+
+    guard let currentName = currentDefaultInputName(),
+          let currentEntry = priorityEntry(matching: currentName)
+    else {
+        // Current input isn't ranked at all — any available ranked entry is "better".
+        return bestEntry
+    }
+
+    guard bestEntry != currentEntry,
+          let currentIndex = Settings.micPriorityList.firstIndex(of: currentEntry),
+          let bestIndex = Settings.micPriorityList.firstIndex(of: bestEntry),
+          bestIndex < currentIndex
+    else {
+        return nil
+    }
+    return bestEntry
+}
+
+// Registers a listener that fires whenever the default input device changes
+// or the set of connected audio devices changes (plug/unplug). The handler
+// is invoked on the main queue.
+func onAudioConfigurationChanged(_ handler: @escaping () -> Void) {
+    let systemObject = AudioObjectID(kAudioObjectSystemObject)
+    let block: AudioObjectPropertyListenerBlock = { _, _ in
+        DispatchQueue.main.async {
+            handler()
+        }
+    }
+
+    var defaultInputAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultInputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    AudioObjectAddPropertyListenerBlock(systemObject, &defaultInputAddress, DispatchQueue.main, block)
+
+    var deviceListAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    AudioObjectAddPropertyListenerBlock(systemObject, &deviceListAddress, DispatchQueue.main, block)
 }
