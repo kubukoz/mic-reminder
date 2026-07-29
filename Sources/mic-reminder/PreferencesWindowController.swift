@@ -106,11 +106,12 @@ final class MicNameListView: NSView, NSTableViewDataSource, NSTableViewDelegate 
 final class PreferencesWindowController: NSWindowController {
     private let priorityListView = MicNameListView()
     private let unrankedListView = MicNameListView()
+    private let autoSwitchCheckbox = NSButton(checkboxWithTitle: "Automatically switch to the higher-priority mic", target: nil, action: nil)
     var onSave: (() -> Void)?
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -138,6 +139,8 @@ final class PreferencesWindowController: NSWindowController {
         unrankedListView.names = Settings.unrankedMicNames
         unrankedListView.greyedOutNames = Set(Settings.unrankedMicNames.filter { !isConnected($0) })
         unrankedListView.currentMicName = currentMicName
+
+        autoSwitchCheckbox.state = Settings.autoSwitch ? .on : .off
     }
 
     private func wireDragHandlers() {
@@ -178,7 +181,7 @@ final class PreferencesWindowController: NSWindowController {
         let saveButton = NSButton(title: "Save", target: self, action: #selector(save))
         saveButton.keyEquivalent = "\r"
 
-        let views: [NSView] = [priorityLabel, priorityListView, unrankedLabel, unrankedListView, refreshButton, saveButton]
+        let views: [NSView] = [priorityLabel, priorityListView, unrankedLabel, unrankedListView, autoSwitchCheckbox, refreshButton, saveButton]
         for view in views {
             view.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(view)
@@ -203,7 +206,11 @@ final class PreferencesWindowController: NSWindowController {
             unrankedListView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
             unrankedListView.heightAnchor.constraint(equalToConstant: 110),
 
-            refreshButton.topAnchor.constraint(equalTo: unrankedListView.bottomAnchor, constant: 8),
+            autoSwitchCheckbox.topAnchor.constraint(equalTo: unrankedListView.bottomAnchor, constant: 16),
+            autoSwitchCheckbox.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            autoSwitchCheckbox.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            refreshButton.topAnchor.constraint(equalTo: autoSwitchCheckbox.bottomAnchor, constant: 16),
             refreshButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
 
             saveButton.topAnchor.constraint(equalTo: refreshButton.bottomAnchor, constant: 20),
@@ -220,6 +227,7 @@ final class PreferencesWindowController: NSWindowController {
     @objc private func save() {
         Settings.micPriorityList = priorityListView.names
         Settings.unrankedMicNames = unrankedListView.names
+        Settings.autoSwitch = autoSwitchCheckbox.state == .on
         onSave?()
         window?.close()
     }

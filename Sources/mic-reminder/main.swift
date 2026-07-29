@@ -50,13 +50,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    // Switching the default input immediately from within the CoreAudio
+    // config-change callback is flaky — the HAL can still be mid-transaction
+    // (e.g. reacting to the same plug/unplug event we're reacting to) and
+    // silently ignores or reverts the set. A short delay lets that settle.
+    private static let autoSwitchDelay: TimeInterval = 1.0
+
     private func poll() {
         reconcileKnownMicNames()
         let betterEntry = betterMicEntryThanCurrent()
         if let betterEntry, betterEntry != lastTriggeredEntry {
-            showWarning(betterEntry: betterEntry)
+            if Settings.autoSwitch {
+                let previousName = currentDefaultInputName() ?? "current mic"
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoSwitchDelay) { [weak self] in
+                    guard let self, let id = deviceID(forPriorityEntry: betterEntry) else { return }
+                    setDefaultInputDevice(id)
+                    showAutoSwitchNotice(from: previousName, to: betterEntry)
+                }
+            } else {
+                showWarning(betterEntry: betterEntry)
+            }
         }
         lastTriggeredEntry = betterEntry
+    }
+
+    private func showAutoSwitchNotice(from previousName: String, to betterEntry: String) {
+        guard let button = statusItem.button else { return }
+
+        let label = NSTextField(wrappingLabelWithString: "Switched from \(previousName) to \(betterEntry) automatically.")
+        label.font = NSFont.systemFont(ofSize: 13)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 60))
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        let viewController = NSViewController()
+        viewController.view = container
+        popover.contentSize = NSSize(width: 280, height: 60)
+        popover.contentViewController = viewController
+
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak viewController] in
+            guard let self, let viewController, popover.contentViewController === viewController else { return }
+            popover.performClose(nil)
+        }
     }
 
     private func showWarning(betterEntry: String) {
@@ -85,6 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let viewController = NSViewController()
         viewController.view = container
+        popover.contentSize = NSSize(width: 280, height: 120)
         popover.contentViewController = viewController
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)

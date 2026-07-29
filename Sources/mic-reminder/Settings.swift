@@ -4,6 +4,7 @@ enum Settings {
     private static let defaults = UserDefaults.standard
     private static let micPriorityKey = "micPriorityList"
     private static let unrankedMicsKey = "unrankedMicNames"
+    private static let autoSwitchKey = "autoSwitch"
 
     // Highest priority first. Only devices in this list participate in
     // detection. Includes devices not currently connected — their rank is
@@ -11,6 +12,13 @@ enum Settings {
     static var micPriorityList: [String] {
         get { defaults.stringArray(forKey: micPriorityKey) ?? [] }
         set { defaults.set(newValue, forKey: micPriorityKey) }
+    }
+
+    // When true, switching to a higher-priority mic happens automatically;
+    // when false, the popover warning offers a manual "Switch" button instead.
+    static var autoSwitch: Bool {
+        get { defaults.object(forKey: autoSwitchKey) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: autoSwitchKey) }
     }
 
     // Known devices not (or no longer) in the priority list. New devices
