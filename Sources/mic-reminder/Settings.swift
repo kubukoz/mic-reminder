@@ -5,6 +5,7 @@ enum Settings {
     private static let micPriorityKey = "micPriorityList"
     private static let unrankedMicsKey = "unrankedMicNames"
     private static let autoSwitchKey = "autoSwitch"
+    private static let showMicNameKey = "showMicNameInMenuBar"
 
     // Highest priority first. Only devices in this list participate in
     // detection. Includes devices not currently connected — their rank is
@@ -19,6 +20,13 @@ enum Settings {
     static var autoSwitch: Bool {
         get { defaults.object(forKey: autoSwitchKey) as? Bool ?? true }
         set { defaults.set(newValue, forKey: autoSwitchKey) }
+    }
+
+    // When true, the menu bar item shows the current input device's name next
+    // to the icon; when false, only the icon is shown.
+    static var showMicNameInMenuBar: Bool {
+        get { defaults.object(forKey: showMicNameKey) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: showMicNameKey) }
     }
 
     // Known devices not (or no longer) in the priority list. New devices

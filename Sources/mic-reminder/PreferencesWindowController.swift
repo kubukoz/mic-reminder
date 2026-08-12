@@ -107,6 +107,7 @@ final class PreferencesWindowController: NSWindowController {
     private let priorityListView = MicNameListView()
     private let unrankedListView = MicNameListView()
     private let autoSwitchCheckbox = NSButton(checkboxWithTitle: "Automatically switch to the higher-priority mic", target: nil, action: nil)
+    private let showMicNameCheckbox = NSButton(checkboxWithTitle: "Show current mic name in the menu bar", target: nil, action: nil)
     var onSave: (() -> Void)?
 
     convenience init() {
@@ -141,6 +142,7 @@ final class PreferencesWindowController: NSWindowController {
         unrankedListView.currentMicName = currentMicName
 
         autoSwitchCheckbox.state = Settings.autoSwitch ? .on : .off
+        showMicNameCheckbox.state = Settings.showMicNameInMenuBar ? .on : .off
     }
 
     private func wireDragHandlers() {
@@ -181,7 +183,7 @@ final class PreferencesWindowController: NSWindowController {
         let saveButton = NSButton(title: "Save", target: self, action: #selector(save))
         saveButton.keyEquivalent = "\r"
 
-        let views: [NSView] = [priorityLabel, priorityListView, unrankedLabel, unrankedListView, autoSwitchCheckbox, refreshButton, saveButton]
+        let views: [NSView] = [priorityLabel, priorityListView, unrankedLabel, unrankedListView, autoSwitchCheckbox, showMicNameCheckbox, refreshButton, saveButton]
         for view in views {
             view.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(view)
@@ -210,7 +212,11 @@ final class PreferencesWindowController: NSWindowController {
             autoSwitchCheckbox.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             autoSwitchCheckbox.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
 
-            refreshButton.topAnchor.constraint(equalTo: autoSwitchCheckbox.bottomAnchor, constant: 16),
+            showMicNameCheckbox.topAnchor.constraint(equalTo: autoSwitchCheckbox.bottomAnchor, constant: 8),
+            showMicNameCheckbox.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            showMicNameCheckbox.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            refreshButton.topAnchor.constraint(equalTo: showMicNameCheckbox.bottomAnchor, constant: 16),
             refreshButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
 
             saveButton.topAnchor.constraint(equalTo: refreshButton.bottomAnchor, constant: 20),
@@ -228,6 +234,7 @@ final class PreferencesWindowController: NSWindowController {
         Settings.micPriorityList = priorityListView.names
         Settings.unrankedMicNames = unrankedListView.names
         Settings.autoSwitch = autoSwitchCheckbox.state == .on
+        Settings.showMicNameInMenuBar = showMicNameCheckbox.state == .on
         onSave?()
         window?.close()
     }

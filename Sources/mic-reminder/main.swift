@@ -4,15 +4,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var lastTriggeredEntry: String?
+    private var showMicNameItem: NSMenuItem?
     private var preferencesWindowController: PreferencesWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "mic.badge.xmark", accessibilityDescription: "mic-reminder")
-        }
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let menu = NSMenu()
+        let showMicNameItem = NSMenuItem(title: "Show Mic Name", action: #selector(toggleShowMicName), keyEquivalent: "")
+        showMicNameItem.state = Settings.showMicNameInMenuBar ? .on : .off
+        menu.addItem(showMicNameItem)
+        self.showMicNameItem = showMicNameItem
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Preferences…", action: #selector(showPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -46,6 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc private func toggleShowMicName() {
+        Settings.showMicNameInMenuBar.toggle()
+        updateStatusItem(betterEntry: betterMicEntryThanCurrent())
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -56,15 +64,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // silently ignores or reverts the set. A short delay lets that settle.
     private static let autoSwitchDelay: TimeInterval = 1.0
 
+    // Long device names ("MacBook Pro Microphone") would crowd out the rest of
+    // the menu bar, so the title is truncated with an ellipsis. The full name
+    // stays available via the button's tooltip.
+    private static let maxTitleLength = 18
+
+    private func updateStatusItem(betterEntry: String?) {
+        guard let button = statusItem.button else { return }
+
+        let currentName = currentDefaultInputName()
+        let symbol = betterEntry == nil ? "mic" : "mic.badge.xmark"
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: currentName ?? "mic-reminder")
+
+        if Settings.showMicNameInMenuBar {
+            let name = currentName ?? "No input"
+            button.title = name.count > Self.maxTitleLength
+                ? String(name.prefix(Self.maxTitleLength - 1)) + "…"
+                : name
+            button.imagePosition = .imageLeading
+        } else {
+            button.title = ""
+            button.imagePosition = .imageOnly
+        }
+        button.toolTip = currentName.map { "Current input: \($0)" } ?? "No audio input device"
+
+        showMicNameItem?.state = Settings.showMicNameInMenuBar ? .on : .off
+    }
+
     private func poll() {
         reconcileKnownMicNames()
         let betterEntry = betterMicEntryThanCurrent()
+        updateStatusItem(betterEntry: betterEntry)
         if let betterEntry, betterEntry != lastTriggeredEntry {
             if Settings.autoSwitch {
                 let previousName = currentDefaultInputName() ?? "current mic"
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoSwitchDelay) { [weak self] in
                     guard let self, let id = deviceID(forPriorityEntry: betterEntry) else { return }
                     setDefaultInputDevice(id)
+                    updateStatusItem(betterEntry: betterMicEntryThanCurrent())
                     showAutoSwitchNotice(from: previousName, to: betterEntry)
                 }
             } else {
@@ -137,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func switchToBetterMic() {
         if let entry = lastTriggeredEntry, let id = deviceID(forPriorityEntry: entry) {
             setDefaultInputDevice(id)
+            updateStatusItem(betterEntry: betterMicEntryThanCurrent())
         }
         popover.performClose(nil)
     }
