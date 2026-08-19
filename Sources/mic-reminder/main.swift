@@ -63,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // (e.g. reacting to the same plug/unplug event we're reacting to) and
     // silently ignores or reverts the set. A short delay lets that settle.
     private static let autoSwitchDelay: TimeInterval = 1.0
+    private static let popoverWidth: CGFloat = 300
+    // popoverWidth minus the glass padding (14 each side), the icon column and
+    // the row spacing — what's actually left for the text to wrap into.
+    private static let labelWidth: CGFloat = 300 - 28 - 18 - 10
 
     // Long device names ("MacBook Pro Microphone") would crowd out the rest of
     // the menu bar, so the title is truncated with an ellipsis. The full name
@@ -120,16 +124,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let label = NSTextField(wrappingLabelWithString: "Switched from \(previousName) to \(betterEntry) automatically.")
         label.font = NSFont.systemFont(ofSize: 13)
+        label.preferredMaxLayoutWidth = Self.labelWidth
+
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        icon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         let row = NSStackView(views: [icon, label])
         row.orientation = .horizontal
         row.alignment = .top
         row.spacing = 10
 
-        popover.contentSize = NSSize(width: 300, height: 76)
         let viewController = glassPopoverContent(
             Glass.wrap(row, padding: 14),
-            size: popover.contentSize
+            width: Self.popoverWidth
         )
         popover.contentViewController = viewController
 
@@ -151,6 +158,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let label = NSTextField(wrappingLabelWithString: "Using \(currentName), but \(betterEntry) is available and ranked higher — consider switching input!")
         label.font = NSFont.systemFont(ofSize: 13)
+        label.preferredMaxLayoutWidth = Self.labelWidth
+
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        icon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         let row = NSStackView(views: [icon, label])
         row.orientation = .horizontal
@@ -165,10 +176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.alignment = .leading
         stack.spacing = 12
 
-        popover.contentSize = NSSize(width: 300, height: 132)
         popover.contentViewController = glassPopoverContent(
             Glass.wrap(stack, padding: 14),
-            size: popover.contentSize
+            width: Self.popoverWidth
         )
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -178,8 +188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // glass and flatten it. Hosting the glass in a transparent content view
     // controller and clearing the popover's own material lets the glass be
     // the only thing the user sees.
-    private func glassPopoverContent(_ glass: NSView, size: NSSize) -> NSViewController {
-        let container = NSView(frame: NSRect(origin: .zero, size: size))
+    private func glassPopoverContent(_ glass: NSView, width: CGFloat) -> NSViewController {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
         glass.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(glass)
         NSLayoutConstraint.activate([
@@ -189,8 +200,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             glass.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
 
+        // The glass container is what the popover measures. Without a width the
+        // wrapping label has no line-break point, so it collapses to its
+        // narrowest fit and grows tall instead. Height stays free so the label
+        // decides how many lines it needs.
+        let root = Glass.container(container)
+        root.translatesAutoresizingMaskIntoConstraints = false
+        root.widthAnchor.constraint(equalToConstant: width).isActive = true
+
         let viewController = NSViewController()
-        viewController.view = Glass.container(container)
+        viewController.view = root
         return viewController
     }
 

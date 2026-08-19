@@ -32,6 +32,7 @@ enum Glass {
 
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
+            glass.translatesAutoresizingMaskIntoConstraints = false
             glass.cornerRadius = cornerRadius
             glass.tintColor = tint
             glass.style = style.appKitStyle
@@ -40,6 +41,7 @@ enum Glass {
         }
 
         let fallback = NSVisualEffectView()
+        fallback.translatesAutoresizingMaskIntoConstraints = false
         fallback.material = .popover
         fallback.blendingMode = .behindWindow
         fallback.state = .active
@@ -63,6 +65,7 @@ enum Glass {
     static func container(_ content: NSView, spacing: CGFloat = 20) -> NSView {
         if #available(macOS 26.0, *) {
             let container = NSGlassEffectContainerView()
+            container.translatesAutoresizingMaskIntoConstraints = false
             container.spacing = spacing
             container.contentView = content
             return container
@@ -98,6 +101,7 @@ enum Glass {
     private static func padded(_ view: NSView, by padding: CGFloat) -> NSView {
         guard padding > 0 else { return view }
         let host = NSView()
+        host.translatesAutoresizingMaskIntoConstraints = false
         view.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(view)
         NSLayoutConstraint.activate([
