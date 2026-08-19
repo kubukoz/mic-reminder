@@ -114,22 +114,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showAutoSwitchNotice(from previousName: String, to betterEntry: String) {
         guard let button = statusItem.button else { return }
 
+        let icon = NSImageView(image: NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) ?? NSImage())
+        icon.contentTintColor = .controlAccentColor
+        icon.symbolConfiguration = .init(pointSize: 18, weight: .medium)
+
         let label = NSTextField(wrappingLabelWithString: "Switched from \(previousName) to \(betterEntry) automatically.")
         label.font = NSFont.systemFont(ofSize: 13)
-        label.translatesAutoresizingMaskIntoConstraints = false
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 60))
-        container.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
-        ])
+        let row = NSStackView(views: [icon, label])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 10
 
-        let viewController = NSViewController()
-        viewController.view = container
-        popover.contentSize = NSSize(width: 280, height: 60)
+        popover.contentSize = NSSize(width: 300, height: 76)
+        let viewController = glassPopoverContent(
+            Glass.wrap(row, padding: 14),
+            size: popover.contentSize
+        )
         popover.contentViewController = viewController
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -143,32 +144,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
 
         let currentName = currentDefaultInputName() ?? "current mic"
+
+        let icon = NSImageView(image: NSImage(systemSymbolName: "mic.badge.xmark", accessibilityDescription: nil) ?? NSImage())
+        icon.contentTintColor = .systemOrange
+        icon.symbolConfiguration = .init(pointSize: 18, weight: .medium)
+
         let label = NSTextField(wrappingLabelWithString: "Using \(currentName), but \(betterEntry) is available and ranked higher — consider switching input!")
         label.font = NSFont.systemFont(ofSize: 13)
-        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let row = NSStackView(views: [icon, label])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 10
 
         let switchButton = NSButton(title: "Switch to \(betterEntry)", target: self, action: #selector(switchToBetterMic))
-        switchButton.translatesAutoresizingMaskIntoConstraints = false
+        Glass.style(switchButton, prominent: true)
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 120))
-        container.addSubview(label)
-        container.addSubview(switchButton)
+        let stack = NSStackView(views: [row, switchButton])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+
+        popover.contentSize = NSSize(width: 300, height: 132)
+        popover.contentViewController = glassPopoverContent(
+            Glass.wrap(stack, padding: 14),
+            size: popover.contentSize
+        )
+
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    // NSPopover draws its own opaque background, which would sit behind our
+    // glass and flatten it. Hosting the glass in a transparent content view
+    // controller and clearing the popover's own material lets the glass be
+    // the only thing the user sees.
+    private func glassPopoverContent(_ glass: NSView, size: NSSize) -> NSViewController {
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        glass.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(glass)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-
-            switchButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            switchButton.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 12),
-            switchButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+            glass.topAnchor.constraint(equalTo: container.topAnchor),
+            glass.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            glass.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
 
         let viewController = NSViewController()
-        viewController.view = container
-        popover.contentSize = NSSize(width: 280, height: 120)
-        popover.contentViewController = viewController
-
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        viewController.view = Glass.container(container)
+        return viewController
     }
 
     @objc private func switchToBetterMic() {
