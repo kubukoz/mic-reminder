@@ -4,6 +4,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var lastTriggeredEntry: String?
+    private var autoSwitchBlockedUntil: Date = .distantPast
     private var showMicNameItem: NSMenuItem?
     private var preferencesWindowController: PreferencesWindowController?
 
@@ -63,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // (e.g. reacting to the same plug/unplug event we're reacting to) and
     // silently ignores or reverts the set. A short delay lets that settle.
     private static let autoSwitchDelay: TimeInterval = 1.0
+    // After an automatic switch, ignore further auto-switch opportunities for
+    // a moment. A device that flaps (AirPods re-negotiating, say) can hand the
+    // default input back and forth several times in a row; without this we'd
+    // either fight it on every event or, worse, latch onto one entry and stop
+    // switching at all. The warning popover is unaffected.
+    private static let autoSwitchCooldown: TimeInterval = 5.0
     private static let popoverWidth: CGFloat = 300
     // popoverWidth minus the glass padding (14 each side), the icon column and
     // the row spacing — what's actually left for the text to wrap into.
@@ -99,19 +106,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reconcileKnownMicNames()
         let betterEntry = betterMicEntryThanCurrent()
         updateStatusItem(betterEntry: betterEntry)
-        if let betterEntry, betterEntry != lastTriggeredEntry {
-            if Settings.autoSwitch {
-                let previousName = currentDefaultInputName() ?? "current mic"
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoSwitchDelay) { [weak self] in
-                    guard let self, let id = deviceID(forPriorityEntry: betterEntry) else { return }
-                    setDefaultInputDevice(id)
-                    updateStatusItem(betterEntry: betterMicEntryThanCurrent())
-                    showAutoSwitchNotice(from: previousName, to: betterEntry)
-                }
-            } else {
-                showWarning(betterEntry: betterEntry)
-            }
+
+        guard let betterEntry else {
+            lastTriggeredEntry = nil
+            return
         }
+
+        if Settings.autoSwitch {
+            // Deliberately not gated on `betterEntry != lastTriggeredEntry`: when
+            // something steals the input back, the best entry is the same one we
+            // just switched to, and skipping it would leave the wrong mic active
+            // for good. The cooldown is what keeps that from becoming a fight.
+            guard Date() >= autoSwitchBlockedUntil else {
+                lastTriggeredEntry = betterEntry
+                return
+            }
+            autoSwitchBlockedUntil = .distantFuture
+
+            let previousName = currentDefaultInputName() ?? "current mic"
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoSwitchDelay) { [weak self] in
+                guard let self else { return }
+                // The delay is long enough for the situation to have moved on.
+                guard betterMicEntryThanCurrent() == betterEntry,
+                      let id = deviceID(forPriorityEntry: betterEntry),
+                      setDefaultInputDevice(id)
+                else {
+                    autoSwitchBlockedUntil = .distantPast
+                    return
+                }
+                autoSwitchBlockedUntil = Date() + Self.autoSwitchCooldown
+                updateStatusItem(betterEntry: betterMicEntryThanCurrent())
+                showAutoSwitchNotice(from: previousName, to: betterEntry)
+            }
+        } else if betterEntry != lastTriggeredEntry {
+            showWarning(betterEntry: betterEntry)
+        }
+
         lastTriggeredEntry = betterEntry
     }
 
