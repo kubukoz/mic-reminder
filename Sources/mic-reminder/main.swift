@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autoSwitchBlockedUntil: Date = .distantPast
     private var showMicNameItem: NSMenuItem?
     private var preferencesWindowController: PreferencesWindowController?
+    private var pollTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -30,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onAudioConfigurationChanged { [weak self] in
             self?.poll()
         }
+        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.fallbackPollInterval, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+        pollTimer?.tolerance = 5
         poll()
     }
 
@@ -70,6 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // either fight it on every event or, worse, latch onto one entry and stop
     // switching at all. The warning popover is unaffected.
     private static let autoSwitchCooldown: TimeInterval = 5.0
+    // CoreAudio listeners drive polling, but a notification can occasionally
+    // be missed (e.g. around sleep/wake), so also re-check on a slow timer.
+    private static let fallbackPollInterval: TimeInterval = 60
     private static let popoverWidth: CGFloat = 300
     // popoverWidth minus the glass padding (14 each side), the icon column and
     // the row spacing — what's actually left for the text to wrap into.
